@@ -15,4 +15,4 @@ until redis-cli ping | grep -q PONG; do
 done
 
 # 啟動 FastAPI
-exec poetry run uvicorn app.app:app --host 0.0.0.0 --port 10000 --workers 4 --no-access-log
+exec poetry run uvicorn app.app:app --host 0.0.0.0 --port 10000 --workers 2 --no-access-log
