@@ -111,3 +111,5 @@ ENV/
 scripts/
 
 service_account.json
+
+.envrc
