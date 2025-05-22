@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "st-llm-search-engine-backend"
+version = "0.1.0"
+description = "FastAPI + Redis + Google Sheet API server for LLM search engine."
+authors = ["Your Name <your@email.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.110.0"
+uvicorn = {extras = ["standard"], version = "^0.29.0"}
+redis = "^5.0.0"
+gspread = "^6.0.0"
+google-auth = "^2.0.0"
+pandas = "^2.2.0"
+fakeredis = "^2.21.0"
+pydantic = "^2.6.0"
+google-generativeai = "^0.8.5"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api" 
