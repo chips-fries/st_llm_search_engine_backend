@@ -408,8 +408,8 @@ def create_saved_search(
 def get_saved_searches(session_id: str) -> List[Dict[str, Any]]:
     """獲取已保存的搜索列表，確保格式統一"""
     try:
-        if get_session(session_id) is None:
-            return []
+        get_session(session_id)
+        
         saved_searches_key = f"saved_searches:{session_id}"
         raw_list = get_redis_key(saved_searches_key, default=[])
 
