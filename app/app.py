@@ -46,13 +46,37 @@ async def startup_event():
     logger.info("==================================================")
     logger.info("API 服務器啟動")
     logger.info("==================================================")
-    # 只做預熱
-    try:
-        logger.info("預熱 Google Sheet 三張表到 Redis cache ...")
-        sheet_manager.get_kol_info(force_refresh=True)
-        sheet_manager.get_saved_searches(force_refresh=True)
-        sheet_manager.get_kol_data(force_refresh=True)
-        logger.info("Google Sheet 預熱完成")
-    except Exception as e:
-        logger.error(f"Google Sheet 預熱失敗: {e}")
+    # 預熱 Google Sheet 數據到 Redis，增加重試機制
+    retries = 0
+    max_retries = 3
+    success = False
+    
+    while retries < max_retries and not success:
+        try:
+            logger.info(f"預熱 Google Sheet 三張表到 Redis cache (嘗試 {retries+1}/{max_retries}) ...")
+            
+            # 加載 KOL info
+            kol_info = sheet_manager.get_kol_info(force_refresh=True)
+            logger.info(f"KOL info 預熱完成: {len(kol_info)} 筆")
+            
+            # 加載 saved searches
+            saved_searches = sheet_manager.get_saved_searches(force_refresh=True)
+            logger.info(f"Saved searches 預熱完成: {len(saved_searches)} 筆")
+            
+            # 加載 KOL data
+            kol_data = sheet_manager.get_kol_data(force_refresh=True)
+            logger.info(f"KOL data 預熱完成: {len(kol_data)} 筆")
+            
+            logger.info("Google Sheet 預熱全部完成")
+            success = True
+        except Exception as e:
+            retries += 1
+            logger.error(f"Google Sheet 預熱嘗試 {retries}/{max_retries} 失敗: {e}")
+            if retries < max_retries:
+                logger.info(f"等待 5 秒後重試...")
+                import time
+                time.sleep(5)
+    
+    if not success:
+        logger.error("Google Sheet 預熱失敗次數已達上限，服務可能無法正常工作")
 

@@ -146,8 +146,34 @@ def create_session(session_id: Optional[str] = None) -> str:
         if session_id is None:
             session_id = generate_session_id()
         now = int(time.time())
+        
+        # 獲取系統搜索，如果沒有則創建默認搜索
         global_saved_searches = get_redis_key("sheet:saved_searches", default=[])
         system_searches = [s for s in global_saved_searches if s.get("account") == "系統"]
+        
+        # 如果系統搜索為空，創建至少一個默認系統搜索
+        if not system_searches:
+            logger.warning("沒有找到系統搜索，使用默認系統搜索")
+            system_searches = [{
+                "id": 1,
+                "title": "預設搜索",
+                "account": "系統",
+                "order": 1,
+                "query": {
+                    "title": "預設搜索",
+                    "time": 7,
+                    "source": 0,
+                    "tags": ["All"],
+                    "query": "",
+                    "n": 10,
+                    "range": None
+                },
+                "created_at": datetime.now().isoformat()
+            }]
+            # 寫回 redis 以便其它用戶使用
+            set_redis_key("sheet:saved_searches", system_searches)
+            logger.info("已創建默認系統搜索")
+        
         session_data = {
             "created_at": now,
             "updated_at": now
@@ -156,14 +182,16 @@ def create_session(session_id: Optional[str] = None) -> str:
         set_redis_key(session_key, session_data, expire=SESSION_EXPIRE)
         saved_searches_key = f"saved_searches:{session_id}"
         set_redis_key(saved_searches_key, system_searches, expire=SESSION_EXPIRE)
+        
         # 為每個 search_id 建立空的 messages key
         for search in system_searches:
             search_id = search.get("id")
             if search_id is not None:
                 set_redis_key(f"messages:{session_id}-{search_id}", [], expire=SESSION_EXPIRE)
+        
         # 建立一個 messages:{session_id}-999 的空 list
         set_redis_key(f"messages:{session_id}-999", [], expire=SESSION_EXPIRE)
-        logger.info(f"創建新會話: {session_id}")
+        logger.info(f"創建新會話: {session_id}，複製了 {len(system_searches)} 筆系統搜索")
         return session_id
     except Exception as e:
         logger.error(f"創建會話時出錯: {str(e)} | redis_alive={is_redis_alive()}")
@@ -408,16 +436,49 @@ def create_saved_search(
 def get_saved_searches(session_id: str) -> List[Dict[str, Any]]:
     """獲取已保存的搜索列表，確保格式統一"""
     try:
-        get_session(session_id)
-        
+        # 確保 session 存在，如果不存在就創建
+        session = get_session(session_id)
+        if not session:
+            session_id = create_session(session_id)
+            if not session_id:
+                logger.error("創建 session 失敗")
+                return []
+            
+        # 取得 saved_searches，如果是空的就複製系統搜索
         saved_searches_key = f"saved_searches:{session_id}"
         raw_list = get_redis_key(saved_searches_key, default=[])
 
+        # 如果是空的，嘗試從全局複製系統搜索
         if len(raw_list) == 0:
+            logger.info(f"saved_searches:{session_id} 為空，從全局複製系統搜索")
             global_saved_searches = get_redis_key("sheet:saved_searches", default=[])
             system_searches = [s for s in global_saved_searches if s.get("account") == "系統"]
+            
+            # 如果全局系統搜索仍為空，創建一個默認系統搜索
+            if not system_searches:
+                logger.warning("全局系統搜索為空，創建默認系統搜索")
+                system_searches = [{
+                    "id": 1,
+                    "title": "預設搜索",
+                    "account": "系統",
+                    "order": 1,
+                    "query": {
+                        "title": "預設搜索",
+                        "time": 7,
+                        "source": 0,
+                        "tags": ["All"],
+                        "query": "",
+                        "n": 10,
+                        "range": None
+                    },
+                    "created_at": datetime.now().isoformat()
+                }]
+                # 順便寫回全局 redis
+                set_redis_key("sheet:saved_searches", system_searches)
+            
             set_redis_key(saved_searches_key, system_searches, expire=SESSION_EXPIRE)
-            raw_list = get_redis_key(saved_searches_key, default=[])
+            raw_list = system_searches
+            logger.info(f"複製了 {len(raw_list)} 筆系統搜索")
 
         result = []
         for s in raw_list:
