@@ -20,69 +20,69 @@ _use_fake_redis = False
 
 router = APIRouter(tags=["redis"])
 
-@router.get("/saved-searches")
-async def get_saved_searches_endpoint(session_id: str):
-    try:
-        searches = get_saved_searches(session_id)
-        return JSONResponse({"searches": searches})
-    except Exception as e:
-        logger.error(f"獲取已保存搜索時出錯: {str(e)}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+# @router.get("/saved-searches")
+# async def get_saved_searches_endpoint(session_id: str):
+#     try:
+#         searches = get_saved_searches(session_id)
+#         return JSONResponse({"searches": searches})
+#     except Exception as e:
+#         logger.error(f"獲取已保存搜索時出錯: {str(e)}")
+#         return JSONResponse({"error": str(e)}, status_code=500)
 
-@router.post("/saved-searches")
-async def create_saved_search_endpoint(session_id: str, search: Dict[str, Any]):
-    try:
-        saved_search = save_search(session_id, search)
-        return JSONResponse(saved_search)
-    except Exception as e:
-        logger.error(f"保存搜索時出錯: {str(e)}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+# @router.post("/saved-searches")
+# async def create_saved_search_endpoint(session_id: str, search: Dict[str, Any]):
+#     try:
+#         saved_search = save_search(session_id, search)
+#         return JSONResponse(saved_search)
+#     except Exception as e:
+#         logger.error(f"保存搜索時出錯: {str(e)}")
+#         return JSONResponse({"error": str(e)}, status_code=500)
 
-@router.delete("/saved-searches")
-async def delete_saved_searches_endpoint(
-    session_id: str,
-    search_ids: List[int] = Query(...)
-):
-    try:
-        success = delete_searches(session_id, search_ids)
-        return JSONResponse({"success": success})
-    except Exception as e:
-        logger.error(f"刪除搜索時出錯: {str(e)}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+# @router.delete("/saved-searches")
+# async def delete_saved_searches_endpoint(
+#     session_id: str,
+#     search_ids: List[int] = Query(...)
+# ):
+#     try:
+#         success = delete_searches(session_id, search_ids)
+#         return JSONResponse({"success": success})
+#     except Exception as e:
+#         logger.error(f"刪除搜索時出錯: {str(e)}")
+#         return JSONResponse({"error": str(e)}, status_code=500)
 
-@router.patch("/saved-searches")
-async def update_saved_search_endpoint(
-    session_id: str,
-    search_id: int,
-    update: dict
-):
-    """
-    更新指定 session 的單筆 saved_searches
-    Args:
-        session_id: 會話 ID
-        search_id: 要更新的 search id (int)
-        update: 要更新的內容 (dict)
-    Returns:
-        更新後的 search dict
-    """
-    try:
-        searches = get_saved_searches(session_id)
-        found = False
-        for idx, s in enumerate(searches):
-            if s.get("id") == search_id:
-                searches[idx] = {**s, **update}
-                found = True
-                break
-        if not found:
-            return JSONResponse(
-                {"error": f"search_id {search_id} 不存在"}, status_code=404
-            )
-        key = f"saved_searches:{session_id}"
-        set_redis_key(key, searches)
-        return JSONResponse(searches[idx])
-    except Exception as e:
-        logger.error(f"更新 saved_searches 時出錯: {str(e)}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+# @router.patch("/saved-searches")
+# async def update_saved_search_endpoint(
+#     session_id: str,
+#     search_id: int,
+#     update: dict
+# ):
+#     """
+#     更新指定 session 的單筆 saved_searches
+#     Args:
+#         session_id: 會話 ID
+#         search_id: 要更新的 search id (int)
+#         update: 要更新的內容 (dict)
+#     Returns:
+#         更新後的 search dict
+#     """
+#     try:
+#         searches = get_saved_searches(session_id)
+#         found = False
+#         for idx, s in enumerate(searches):
+#             if s.get("id") == search_id:
+#                 searches[idx] = {**s, **update}
+#                 found = True
+#                 break
+#         if not found:
+#             return JSONResponse(
+#                 {"error": f"search_id {search_id} 不存在"}, status_code=404
+#             )
+#         key = f"saved_searches:{session_id}"
+#         set_redis_key(key, searches)
+#         return JSONResponse(searches[idx])
+#     except Exception as e:
+#         logger.error(f"更新 saved_searches 時出錯: {str(e)}")
+#         return JSONResponse({"error": str(e)}, status_code=500)
 
 @router.get("/kol-info")
 async def get_kol_info_endpoint():
@@ -250,85 +250,85 @@ def cleanup_redis():
     stop_redis_server()
 
 
-def get_saved_searches(session_id: str) -> List[Dict[str, Any]]:
-    """獲取指定會話的已保存搜索列表
+# def get_saved_searches(session_id: str) -> List[Dict[str, Any]]:
+#     """獲取指定會話的已保存搜索列表
 
-    Args:
-        session_id: 會話 ID
+#     Args:
+#         session_id: 會話 ID
 
-    Returns:
-        已保存的搜索列表
-    """
-    key = f"saved_searches:{session_id}"
-    searches = get_redis_key(key, default=[])
-    logger.info(f"[get_saved_searches] 讀取 Redis key={key}，內容={searches}")
-    # 確保返回的數據格式正確
-    formatted_searches = []
-    for search in searches:
-        if isinstance(search, dict):
-            formatted_search = {
-                "id": search.get("id", 0),
-                "title": search.get("title", ""),
-                "account": search.get("account", ""),
-                "order": search.get("order", 0),
-                "query": search.get("query", {}),
-                "created_at": search.get("created_at", "")
-            }
-            formatted_searches.append(formatted_search)
+#     Returns:
+#         已保存的搜索列表
+#     """
+#     key = f"saved_searches:{session_id}"
+#     searches = get_redis_key(key, default=[])
+#     logger.info(f"[get_saved_searches] 讀取 Redis key={key}，內容={searches}")
+#     # 確保返回的數據格式正確
+#     formatted_searches = []
+#     for search in searches:
+#         if isinstance(search, dict):
+#             formatted_search = {
+#                 "id": search.get("id", 0),
+#                 "title": search.get("title", ""),
+#                 "account": search.get("account", ""),
+#                 "order": search.get("order", 0),
+#                 "query": search.get("query", {}),
+#                 "created_at": search.get("created_at", "")
+#             }
+#             formatted_searches.append(formatted_search)
 
-    return formatted_searches
-
-
-def save_search(session_id: str, search_data: Dict[str, Any]) -> Dict[str, Any]:
-    """保存新的搜索
-
-    Args:
-        session_id: 會話 ID
-        search_data: 搜索數據
-
-    Returns:
-        保存的搜索數據
-    """
-    searches = get_saved_searches(session_id)
-    # id: 全部 search 的最大 id + 1
-    search_id = max([s.get("id", 0) for s in searches], default=0) + 1
-    # account: 前端送來的
-    account = search_data.get("account", "")
-    # order: 該 account 下最大 order + 1
-    account_searches = [s for s in searches if s.get("account") == account]
-    order = max([s.get("order", 0) for s in account_searches], default=0) + 1
-
-    # 構建標準格式的搜索記錄
-    search = {
-        "id": search_id,
-        "title": search_data.get("title", f"搜索 {search_id}"),
-        "account": account,
-        "order": order,
-        "query": search_data.get("query", {}),  # 直接使用前端傳來的 query 結構
-        "created_at": datetime.now().isoformat()
-    }
-
-    searches.append(search)
-    key = f"saved_searches:{session_id}"
-    logger.info(f"[save_search] 寫入 Redis key={key}，內容={searches}")
-    set_redis_key(key, searches)
-    return search
+#     return formatted_searches
 
 
-def delete_searches(session_id: str, search_ids: List[int]) -> bool:
-    """批量刪除指定的搜索
+# def save_search(session_id: str, search_data: Dict[str, Any]) -> Dict[str, Any]:
+#     """保存新的搜索
 
-    Args:
-        session_id: 會話 ID
-        search_ids: 要刪除的搜索 ID 列表
+#     Args:
+#         session_id: 會話 ID
+#         search_data: 搜索數據
 
-    Returns:
-        是否成功刪除
-    """
-    searches = get_saved_searches(session_id)
-    searches = [s for s in searches if s["id"] not in search_ids]
-    key = f"saved_searches:{session_id}"
-    return set_redis_key(key, searches)
+#     Returns:
+#         保存的搜索數據
+#     """
+#     searches = get_saved_searches(session_id)
+#     # id: 全部 search 的最大 id + 1
+#     search_id = max([s.get("id", 0) for s in searches], default=0) + 1
+#     # account: 前端送來的
+#     account = search_data.get("account", "")
+#     # order: 該 account 下最大 order + 1
+#     account_searches = [s for s in searches if s.get("account") == account]
+#     order = max([s.get("order", 0) for s in account_searches], default=0) + 1
+
+#     # 構建標準格式的搜索記錄
+#     search = {
+#         "id": search_id,
+#         "title": search_data.get("title", f"搜索 {search_id}"),
+#         "account": account,
+#         "order": order,
+#         "query": search_data.get("query", {}),  # 直接使用前端傳來的 query 結構
+#         "created_at": datetime.now().isoformat()
+#     }
+
+#     searches.append(search)
+#     key = f"saved_searches:{session_id}"
+#     logger.info(f"[save_search] 寫入 Redis key={key}，內容={searches}")
+#     set_redis_key(key, searches)
+#     return search
+
+
+# def delete_searches(session_id: str, search_ids: List[int]) -> bool:
+#     """批量刪除指定的搜索
+
+#     Args:
+#         session_id: 會話 ID
+#         search_ids: 要刪除的搜索 ID 列表
+
+#     Returns:
+#         是否成功刪除
+#     """
+#     searches = get_saved_searches(session_id)
+#     searches = [s for s in searches if s["id"] not in search_ids]
+#     key = f"saved_searches:{session_id}"
+#     return set_redis_key(key, searches)
 
 
 def scan_redis_keys(pattern: str) -> list:

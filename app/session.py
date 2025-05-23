@@ -6,6 +6,7 @@ from .redis import set_redis_key, get_redis_key, delete_redis_key, scan_redis_ke
 from .utils import logger
 from .settings import SESSION_EXPIRE
 import threading
+from datetime import datetime
 
 # per-session lock
 _session_locks: Dict[str, threading.Lock] = {}
@@ -113,10 +114,12 @@ async def api_get_saved_searches(session_id: str):
 async def api_update_saved_search(
     session_id: str = Query(...),
     search_id: int = Query(...),
-    name: Optional[str] = Body(None),
-    params: Optional[dict] = Body(None)
+    update_data: dict = Body(...)
 ):
-    return {"success": update_saved_search(session_id, search_id, name, params)}
+    updated_search = update_saved_search(session_id, search_id, update_data)
+    if updated_search:
+        return updated_search
+    return {"error": "not found or update failed"}
 
 @router.delete("/saved_search")
 async def api_delete_saved_search(session_id: str, search_id: int):
@@ -154,6 +157,13 @@ def create_session(session_id: Optional[str] = None) -> str:
         set_redis_key(session_key, session_data, expire=SESSION_EXPIRE)
         saved_searches_key = f"saved_searches:{session_id}"
         set_redis_key(saved_searches_key, system_searches, expire=SESSION_EXPIRE)
+        # 為每個 search_id 建立空的 messages key
+        for search in system_searches:
+            search_id = search.get("id")
+            if search_id is not None:
+                set_redis_key(f"messages:{session_id}-{search_id}", [], expire=SESSION_EXPIRE)
+        # 建立一個 messages:{session_id}-999 的空 list
+        set_redis_key(f"messages:{session_id}-999", [], expire=SESSION_EXPIRE)
         logger.info(f"創建新會話: {session_id}")
         return session_id
     except Exception as e:
@@ -358,16 +368,7 @@ def create_saved_search(
     search_params: Dict[str, Any],
     name: Optional[str] = None
 ) -> Dict[str, Any]:
-    """保存搜索參數
-
-    Args:
-        session_id: 會話 ID
-        search_params: 搜索參數
-        name: 搜索名稱 (可選)
-
-    Returns:
-        保存的搜索記錄
-    """
+    """保存搜索參數，格式與 get_saved_searches 一致"""
     try:
         lock = get_session_lock(session_id)
         with lock:
@@ -377,13 +378,15 @@ def create_saved_search(
                 session_data = get_session(session_id)
             saved_searches_key = f"saved_searches:{session_id}"
             saved_searches = get_redis_key(saved_searches_key, default=[])
-            search_id = max([s["id"] for s in saved_searches], default=-1) + 1
+            search_id = max([s.get("id", 0) for s in saved_searches], default=0) + 1
+            now_iso = datetime.now().isoformat()
             search_record = {
                 "id": search_id,
-                "name": name or f"Search {int(time.time())}",
-                "params": search_params,
-                "created_at": int(time.time()),
-                "updated_at": int(time.time())
+                "title": search_params.get("title", name or f"Search {int(time.time())}"),
+                "account": search_params.get("account", ""),
+                "order": len(saved_searches) + 1,
+                "query": search_params.get("query", {}),
+                "created_at": now_iso
             }
             saved_searches.append(search_record)
             set_redis_key(saved_searches_key, saved_searches, expire=SESSION_EXPIRE)
@@ -395,19 +398,38 @@ def create_saved_search(
 
 
 def get_saved_searches(session_id: str) -> List[Dict[str, Any]]:
-    """獲取已保存的搜索列表
-
-    Args:
-        session_id: 會話 ID
-
-    Returns:
-        已保存的搜索列表
-    """
+    """獲取已保存的搜索列表，確保格式統一"""
     try:
         if get_session(session_id) is None:
             return []
         saved_searches_key = f"saved_searches:{session_id}"
-        return get_redis_key(saved_searches_key, default=[])
+        raw_list = get_redis_key(saved_searches_key, default=[])
+        result = []
+        for s in raw_list:
+            # 如果已經是正確格式就直接用
+            if all(k in s for k in ("id", "title", "account", "order", "query", "created_at")):
+                result.append(s)
+            # 否則嘗試轉換
+            elif "name" in s and "params" in s:
+                result.append({
+                    "id": s.get("id"),
+                    "title": s.get("name", ""),
+                    "account": s.get("account", ""),
+                    "order": s.get("order", 0),
+                    "query": s.get("params", {}),
+                    "created_at": s.get("created_at", "")
+                })
+            else:
+                # fallback: 填空值
+                result.append({
+                    "id": s.get("id", 0),
+                    "title": s.get("title", ""),
+                    "account": s.get("account", ""),
+                    "order": s.get("order", 0),
+                    "query": s.get("query", {}),
+                    "created_at": s.get("created_at", "")
+                })
+        return result
     except Exception as e:
         logger.error(f"獲取已保存搜索時出錯: {str(e)} | redis_alive={is_redis_alive()}")
         return []
@@ -416,46 +438,37 @@ def get_saved_searches(session_id: str) -> List[Dict[str, Any]]:
 def update_saved_search(
     session_id: str,
     search_id: int,
-    name: Optional[str] = None,
-    params: Optional[Dict[str, Any]] = None
-) -> bool:
+    update_data: dict
+) -> dict:
     """
-    更新已保存的搜索
-
-    Args:
-        session_id: 會話 ID
-        search_id: 搜索 ID
-        name: 新的名稱（可選）
-        params: 新的參數（可選）
-
-    Returns:
-        是否成功更新
+    更新已保存的搜索，直接覆蓋 search dict 的欄位，並回傳更新後的 search dict
     """
     try:
         lock = get_session_lock(session_id)
         with lock:
             if get_session(session_id) is None:
-                return False
+                return {}
             saved_searches_key = f"saved_searches:{session_id}"
             saved_searches = get_redis_key(saved_searches_key, default=[])
             updated = False
+            updated_search = None
             for s in saved_searches:
                 if s["id"] == search_id:
-                    if name is not None:
-                        s["name"] = name
-                    if params is not None:
-                        s["params"] = params
-                    s["updated_at"] = int(time.time())
+                    # 只更新允許的欄位
+                    for k in ["title", "account", "order", "query", "created_at"]:
+                        if k in update_data:
+                            s[k] = update_data[k]
                     updated = True
+                    updated_search = s
                     break
             if updated:
                 set_redis_key(saved_searches_key, saved_searches, expire=SESSION_EXPIRE)
                 logger.info(f"更新 saved_search {search_id} in {session_id}")
-                return True
-            return False
+                return updated_search
+            return {}
     except Exception as e:
         logger.error(f"更新 saved_search 時出錯: {str(e)} | redis_alive={is_redis_alive()}")
-        return False
+        return {}
 
 def delete_saved_search(session_id: str, search_id: int) -> bool:
     """刪除已保存的搜索

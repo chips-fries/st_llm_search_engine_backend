@@ -17,7 +17,6 @@ import traceback
 # 從設定模組導入相關設定
 from .utils import get_logger
 from .redis import (
-    get_redis_connection,
     set_redis_key,
     get_redis_key
 )
@@ -111,11 +110,12 @@ class SheetManager:
     def get_kol_data(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """使用 Redis 緩存獲取 KOL 數據"""
         cache_key = "sheet:kol_data"
-        redis = get_redis_connection()
 
         if not force_refresh:
             cached_data = get_redis_key(cache_key)
             if cached_data:
+                if isinstance(cached_data, str):
+                    cached_data = json.loads(cached_data)
                 logger.debug("使用緩存的 KOL 數據")
                 return cached_data
 
@@ -123,31 +123,34 @@ class SheetManager:
             if not force_refresh:
                 cached_data = get_redis_key(cache_key)
                 if cached_data:
+                    if isinstance(cached_data, str):
+                        cached_data = json.loads(cached_data)
                     return cached_data
 
             if not self._kol_data_connector:
                 config = self.get_kol_data_config()
                 logger.info(f"config: {config}")
                 self._kol_data_connector = SheetConnector(
-                    config["sheet_id"], config["tab_name"], config["service_account_path"]
+                    config["sheet_id"], config["tab_name"], config["credentials_path"]
                 )
             
             logger.info("從 Google Sheet 獲取最新 KOL 數據")
             data = self._kol_data_connector.get_data()
 
             # 更新緩存
-            set_redis_key(cache_key, json.dumps(data), KOL_DATA_EXPIRY)
+            set_redis_key(cache_key, data, KOL_DATA_EXPIRY)
 
             return data
 
     def get_kol_info(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """使用 Redis 緩存獲取 KOL 信息"""
         cache_key = "sheet:kol_info"
-        redis = get_redis_connection()
 
         if not force_refresh:
             cached_data = get_redis_key(cache_key)
             if cached_data:
+                if isinstance(cached_data, str):
+                    cached_data = json.loads(cached_data)
                 logger.debug("使用緩存的 KOL 信息")
                 return cached_data
 
@@ -155,12 +158,14 @@ class SheetManager:
             if not force_refresh:
                 cached_data = get_redis_key(cache_key)
                 if cached_data:
+                    if isinstance(cached_data, str):
+                        cached_data = json.loads(cached_data)
                     return cached_data
 
             if not self._kol_connector:
                 config = self.get_kol_sheet_config()
                 self._kol_connector = SheetConnector(
-                    config["sheet_id"], config["tab_name"], config["service_account_path"]
+                    config["sheet_id"], config["tab_name"], config["credentials_path"]
                 )
 
             logger.info("從 Google Sheet 獲取最新 KOL 信息")
@@ -185,18 +190,19 @@ class SheetManager:
                 standardized_data.append(new_record)
 
             # 更新緩存
-            set_redis_key(cache_key, json.dumps(standardized_data), KOL_EXPIRY)
+            set_redis_key(cache_key, standardized_data, KOL_EXPIRY)
 
             return standardized_data
 
     def get_saved_searches(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """使用 Redis 緩存獲取已保存的搜索記錄"""
         cache_key = "sheet:saved_searches"
-        redis = get_redis_connection()
 
         if not force_refresh:
             cached_data = get_redis_key(cache_key)
             if cached_data:
+                if isinstance(cached_data, str):
+                    cached_data = json.loads(cached_data)
                 logger.debug("使用緩存的已保存搜索")
                 return cached_data
 
@@ -204,12 +210,14 @@ class SheetManager:
             if not force_refresh:
                 cached_data = get_redis_key(cache_key)
                 if cached_data:
+                    if isinstance(cached_data, str):
+                        cached_data = json.loads(cached_data)
                     return cached_data
 
             if not self._saved_search_connector:
                 config = self.get_saved_search_config()
                 self._saved_search_connector = SheetConnector(
-                    config["sheet_id"], config["tab_name"], config["service_account_path"]
+                    config["sheet_id"], config["tab_name"], config["credentials_path"]
                 )
 
             logger.info("從 Google Sheet 獲取最新已保存搜索")
@@ -244,7 +252,7 @@ class SheetManager:
                     continue
 
             # 更新緩存
-            set_redis_key(cache_key, json.dumps(formatted_data), SAVED_SEARCH_EXPIRY)
+            set_redis_key(cache_key, formatted_data, SAVED_SEARCH_EXPIRY)
 
             return formatted_data
 
