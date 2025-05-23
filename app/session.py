@@ -101,10 +101,9 @@ async def api_delete_message(session_id: str, search_id: int, message_id: int):
 @router.post("/saved_search")
 async def api_create_saved_search(
     session_id: str = Query(...),
-    search_params: dict = Body(...),
-    name: Optional[str] = Body(None)
+    search_data: dict = Body(...)
 ):
-    return create_saved_search(session_id, search_params, name)
+    return create_saved_search(session_id, search_data)
 
 @router.get("/saved_search")
 async def api_get_saved_searches(session_id: str):
@@ -365,7 +364,7 @@ def delete_message(session_id: str, search_id: int, message_id: int) -> bool:
 
 def create_saved_search(
     session_id: str,
-    search_params: Dict[str, Any],
+    search_data: Dict[str, Any],
     name: Optional[str] = None
 ) -> Dict[str, Any]:
     """保存搜索參數，格式與 get_saved_searches 一致"""
@@ -380,12 +379,21 @@ def create_saved_search(
             saved_searches = get_redis_key(saved_searches_key, default=[])
             search_id = max([s.get("id", 0) for s in saved_searches], default=0) + 1
             now_iso = datetime.now().isoformat()
+            # 直接組裝 search dict，query 欄位要包進去
             search_record = {
                 "id": search_id,
-                "title": search_params.get("title", name or f"Search {int(time.time())}"),
-                "account": search_params.get("account", ""),
+                "title": search_data.get("title", name or f"Search {int(time.time())}"),
+                "account": search_data.get("account", "系統"),
                 "order": len(saved_searches) + 1,
-                "query": search_params.get("query", {}),
+                "query": {
+                    "title": search_data.get("title", ""),
+                    "time": search_data.get("time", 0),
+                    "source": search_data.get("source", 0),
+                    "tags": search_data.get("tags", []),
+                    "query": search_data.get("query", ""),
+                    "n": search_data.get("n", ""),
+                    "range": search_data.get("range")
+                },
                 "created_at": now_iso
             }
             saved_searches.append(search_record)
