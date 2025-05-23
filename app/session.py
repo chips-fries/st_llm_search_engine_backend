@@ -383,7 +383,7 @@ def create_saved_search(
             search_record = {
                 "id": search_id,
                 "title": search_data.get("title", name or f"Search {int(time.time())}"),
-                "account": search_data.get("account", "系統"),
+                "account": search_data.get("account", "使用者"),
                 "order": len(saved_searches) + 1,
                 "query": {
                     "title": search_data.get("title", ""),
