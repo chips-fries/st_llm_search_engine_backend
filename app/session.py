@@ -412,31 +412,19 @@ def get_saved_searches(session_id: str) -> List[Dict[str, Any]]:
             return []
         saved_searches_key = f"saved_searches:{session_id}"
         raw_list = get_redis_key(saved_searches_key, default=[])
+
+        if len(raw_list) == 0:
+            global_saved_searches = get_redis_key("sheet:saved_searches", default=[])
+            system_searches = [s for s in global_saved_searches if s.get("account") == "系統"]
+            set_redis_key(saved_searches_key, system_searches, expire=SESSION_EXPIRE)
+            raw_list = get_redis_key(saved_searches_key, default=[])
+
         result = []
         for s in raw_list:
             # 如果已經是正確格式就直接用
             if all(k in s for k in ("id", "title", "account", "order", "query", "created_at")):
                 result.append(s)
-            # 否則嘗試轉換
-            elif "name" in s and "params" in s:
-                result.append({
-                    "id": s.get("id"),
-                    "title": s.get("name", ""),
-                    "account": s.get("account", ""),
-                    "order": s.get("order", 0),
-                    "query": s.get("params", {}),
-                    "created_at": s.get("created_at", "")
-                })
-            else:
-                # fallback: 填空值
-                result.append({
-                    "id": s.get("id", 0),
-                    "title": s.get("title", ""),
-                    "account": s.get("account", ""),
-                    "order": s.get("order", 0),
-                    "query": s.get("query", {}),
-                    "created_at": s.get("created_at", "")
-                })
+
         return result
     except Exception as e:
         logger.error(f"獲取已保存搜索時出錯: {str(e)} | redis_alive={is_redis_alive()}")
