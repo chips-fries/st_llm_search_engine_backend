@@ -450,10 +450,18 @@ def update_saved_search(
             updated_search = None
             for s in saved_searches:
                 if s["id"] == search_id:
-                    # 只更新允許的欄位
-                    for k in ["title", "account", "order", "query", "created_at"]:
+                    # 先處理 query 欄位的扁平 merge
+                    if "query" in s and isinstance(s["query"], dict):
+                        for key in ["title", "time", "source", "tags", "query", "n", "range"]:
+                            if key in update_data:
+                                s["query"][key] = update_data[key]
+                    # 其他欄位照舊
+                    for k in ["title", "account", "order", "created_at"]:
                         if k in update_data:
                             s[k] = update_data[k]
+                    # 如果有 query 整包，還是可以直接覆蓋
+                    if "query" in update_data and isinstance(update_data["query"], dict):
+                        s["query"] = update_data["query"]
                     updated = True
                     updated_search = s
                     break
