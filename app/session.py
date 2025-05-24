@@ -5,6 +5,7 @@ from fastapi import APIRouter, Body, Query
 from .redis import set_redis_key, get_redis_key, delete_redis_key, scan_redis_keys, get_redis_connection
 from .utils import logger
 from .settings import SESSION_EXPIRE
+from .sheet import sheet_manager
 import threading
 from datetime import datetime
 
@@ -154,22 +155,29 @@ def create_session(session_id: Optional[str] = None) -> str:
         # 如果系統搜索為空，創建至少一個默認系統搜索
         if not system_searches:
             logger.warning("沒有找到系統搜索，使用默認系統搜索")
-            system_searches = [{
-                "id": 1,
-                "title": "預設搜索",
-                "account": "系統",
-                "order": 1,
-                "query": {
-                    "title": "預設搜索",
-                    "time": 7,
-                    "source": 0,
-                    "tags": ["All"],
-                    "query": "",
-                    "n": 10,
-                    "range": None
-                },
-                "created_at": datetime.now().isoformat()
-            }]
+            _ = sheet_manager.get_kol_info(force_refresh=True)
+            _ = sheet_manager.get_saved_searches(force_refresh=True)
+            _ = sheet_manager.get_kol_data(force_refresh=True)
+
+            # system_searches = [{
+            #     "id": 1,
+            #     "title": "預設搜索",
+            #     "account": "系統",
+            #     "order": 1,
+            #     "query": {
+            #         "title": "預設搜索",
+            #         "time": 7,
+            #         "source": 0,
+            #         "tags": ["All"],
+            #         "query": "",
+            #         "n": 10,
+            #         "range": None
+            #     },
+            #     "created_at": datetime.now().isoformat()
+            # }]
+            global_saved_searches = get_redis_key("sheet:saved_searches", default=[])
+            system_searches = [s for s in global_saved_searches if s.get("account") == "系統"]
+
             # 寫回 redis 以便其它用戶使用
             set_redis_key("sheet:saved_searches", system_searches)
             logger.info("已創建默認系統搜索")
@@ -456,25 +464,29 @@ def get_saved_searches(session_id: str) -> List[Dict[str, Any]]:
             
             # 如果全局系統搜索仍為空，創建一個默認系統搜索
             if not system_searches:
-                logger.warning("全局系統搜索為空，創建默認系統搜索")
-                system_searches = [{
-                    "id": 1,
-                    "title": "預設搜索",
-                    "account": "系統",
-                    "order": 1,
-                    "query": {
-                        "title": "預設搜索",
-                        "time": 7,
-                        "source": 0,
-                        "tags": ["All"],
-                        "query": "",
-                        "n": 10,
-                        "range": None
-                    },
-                    "created_at": datetime.now().isoformat()
-                }]
-                # 順便寫回全局 redis
-                set_redis_key("sheet:saved_searches", system_searches)
+                logger.warning("沒有找到系統搜索，使用默認系統搜索")
+                _ = sheet_manager.get_kol_info(force_refresh=True)
+                _ = sheet_manager.get_saved_searches(force_refresh=True)
+                _ = sheet_manager.get_kol_data(force_refresh=True)
+
+                # system_searches = [{
+                #     "id": 1,
+                #     "title": "預設搜索",
+                #     "account": "系統",
+                #     "order": 1,
+                #     "query": {
+                #         "title": "預設搜索",
+                #         "time": 7,
+                #         "source": 0,
+                #         "tags": ["All"],
+                #         "query": "",
+                #         "n": 10,
+                #         "range": None
+                #     },
+                #     "created_at": datetime.now().isoformat()
+                # }]
+                global_saved_searches = get_redis_key("sheet:saved_searches", default=[])
+                system_searches = [s for s in global_saved_searches if s.get("account") == "系統"]
             
             set_redis_key(saved_searches_key, system_searches, expire=SESSION_EXPIRE)
             raw_list = system_searches
