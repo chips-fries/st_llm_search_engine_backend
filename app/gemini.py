@@ -1,23 +1,23 @@
 import google.generativeai as genai
 from google.generativeai import GenerativeModel
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter
 
-from .session import add_message, get_session_context
+# 避免循環導入
+from . import session
 from .utils import logger
 from .settings import GEMINI_MODEL, GEMINI_API_KEY
 
 router = APIRouter()
 
 
-def gemini_chat(message: str, session_id: str = "default") -> str:
+def gemini_chat(session_id: str = "default", search_id: int = 999) -> str:
     """
-    使用 Gemini API 進行聊天
+    使用 Gemini API 進行聊天，根據會話歷史生成回應
 
     Args:
-        message: 用戶輸入的消息
         session_id: 會話 ID
+        search_id: 搜索 ID，默認為 999 (主對話)
 
     Returns:
         AI 回應文本
@@ -37,32 +37,47 @@ def gemini_chat(message: str, session_id: str = "default") -> str:
         model = GenerativeModel(GEMINI_MODEL)
 
         # 獲取過去 30 條聊天記錄作為上下文
-        context = get_session_context(session_id)
+        messages = session.get_messages(session_id, search_id, limit=30)
+        
+        if not messages:
+            return "請輸入您的問題或指令。"
+        
+        # 獲取最新的消息
+        latest_msg = messages[-1]
+        
+        # 轉換歷史消息為 Gemini API 格式（不包括最新消息）
+        context = []
+        for msg in messages[:-1]:  # 排除最新消息
+            role = "user" if msg["role"] == "user" else "model"
+            context.append({
+                "role": role,
+                "parts": [{"text": msg["content"]}]
+            })
 
         # 創建聊天會話
         chat = model.start_chat(
             history=context if context else None
         )
 
-        # 發送用戶消息
-        response = chat.send_message(message)
+        # 發送最新的用戶消息
+        response = chat.send_message(latest_msg["content"])
         return response.text
     except Exception as e:
         logger.error(f"Gemini 聊天出錯: {str(e)}")
         return f"Gemini API 錯誤: {str(e)}"
 
 
+# 以下函數未在技術文件中提及，暫時註釋掉
+"""
 @router.post("/chat/ai")
 async def chat_ai(request: Request):
-    """
-    處理 AI 聊天請求，自動讀取會話歷史並生成回應
-
-    請求格式：
-    {
-        "message": "用戶輸入的消息",
-        "session_id": "會話ID" (可選)
-    }
-    """
+    # 處理 AI 聊天請求，自動讀取會話歷史並生成回應
+    
+    # 請求格式：
+    # {
+    #     "message": "用戶輸入的消息",
+    #     "session_id": "會話ID" (可選)
+    # }
     try:
         req_data = await request.json()
         message = req_data.get("message", "").strip()
@@ -108,17 +123,15 @@ async def chat_ai(request: Request):
 
 @router.post("/chat/direct")
 async def chat_direct(request: Request):
-    """
-    直接添加訊息到聊天界面，不通過 LLM
-
-    請求格式：
-    {
-        "role": "user" | "bot",
-        "content": "訊息內容",
-        "session_id": "用戶的會話ID" (可選),
-        "metadata": { ... } (可選)
-    }
-    """
+    # 直接添加訊息到聊天界面，不通過 LLM
+    
+    # 請求格式：
+    # {
+    #     "role": "user" | "bot",
+    #     "content": "訊息內容",
+    #     "session_id": "用戶的會話ID" (可選),
+    #     "metadata": { ... } (可選)
+    # }
     try:
         req_data = await request.json()
         role = req_data.get("role")
@@ -158,19 +171,17 @@ async def chat_direct(request: Request):
 
 @router.post("/chat/batch")
 async def chat_batch(request: Request):
-    """
-    批量添加消息到會話
-
-    請求格式：
-    {
-        "messages": [
-            {"role": "user", "content": "用戶消息1"},
-            {"role": "bot", "content": "機器人回應1"},
-            ...
-        ],
-        "session_id": "會話ID" (可選)
-    }
-    """
+    # 批量添加消息到會話
+    
+    # 請求格式：
+    # {
+    #     "messages": [
+    #         {"role": "user", "content": "用戶消息1"},
+    #         {"role": "bot", "content": "機器人回應1"},
+    #         ...
+    #     ],
+    #     "session_id": "會話ID" (可選)
+    # }
     try:
         req_data = await request.json()
         messages = req_data.get("messages", [])
@@ -213,3 +224,4 @@ async def chat_batch(request: Request):
     except Exception as e:
         logger.error(f"批量添加消息時出錯: {str(e)}")
         return JSONResponse({"error": str(e)}, status_code=500) 
+""" 

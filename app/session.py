@@ -66,13 +66,13 @@ async def api_create_message(
     search_id: int = Query(...),
     message: dict = Body(...)
 ):
-    return create_message(
+    result = create_message(
         session_id, 
         search_id, 
         message.get("role"), 
-        message.get("content"), 
-        message.get("metadata")
+        message.get("content")
     )
+    return result
 
 @router.get("/message")
 async def api_get_messages(session_id: str, search_id: int, since_id: Optional[int] = None, limit: Optional[int] = None):
@@ -90,8 +90,7 @@ async def api_update_message(
         search_id, 
         message_id, 
         update_data.get("content"), 
-        update_data.get("role"), 
-        update_data.get("metadata")
+        None   # 不更新 role
     )}
 
 @router.delete("/message")
@@ -124,6 +123,51 @@ async def api_update_saved_search(
 @router.delete("/saved_search")
 async def api_delete_saved_search(session_id: str, search_id: int):
     return {"success": delete_saved_search(session_id, search_id)}
+
+@router.get("/message/llm")
+async def api_get_llm_response(
+    session_id: str,
+    search_id: int,
+    query: str = Query(..., description="用戶查詢")
+):
+    """
+    獲取 LLM 對用戶查詢的回應，基於前 30 個對話記錄
+    
+    Args:
+        session_id: 會話 ID
+        search_id: 搜索 ID
+        query: 用戶查詢
+        
+    Returns:
+        LLM 生成的回應消息
+    """
+    try:
+        # 創建用戶消息
+        create_message(
+            session_id=session_id,
+            search_id=search_id,
+            role="user",
+            content=query
+        )
+        
+        # 使用延遲導入避免循環導入
+        from .gemini import gemini_chat
+        
+        # 使用 Gemini API 處理請求，不再傳入 query
+        bot_reply = gemini_chat(session_id, search_id)
+        
+        # 添加機器人回應到會話
+        bot_message = create_message(
+            session_id=session_id,
+            search_id=search_id,
+            role="bot",
+            content=bot_reply
+        )
+        
+        return bot_message
+    except Exception as e:
+        logger.error(f"LLM 處理查詢時出錯: {str(e)} | redis_alive={is_redis_alive()}")
+        return {"error": str(e)}
 
 def generate_session_id() -> str:
     """生成唯一的 session ID
@@ -258,8 +302,7 @@ def create_message(
     session_id: str,
     search_id: int,
     role: str,
-    content: str,
-    metadata: Optional[Dict[str, Any]] = None
+    content: str
 ) -> Dict[str, Any]:
     """添加消息到會話
 
@@ -268,7 +311,6 @@ def create_message(
         search_id: 搜索 ID
         role: 消息角色 ("user" 或 "bot")
         content: 消息內容
-        metadata: 消息元數據 (可選)，用於存儲額外信息，如查詢參數或分析結果
 
     Returns:
         添加的消息對象
@@ -287,8 +329,7 @@ def create_message(
                 "id": message_id,
                 "role": role,
                 "content": content,
-                "timestamp": int(time.time()),
-                "metadata": metadata or {}
+                "created_at": int(time.time()),
             }
             messages.append(message)
             set_redis_key(message_key, messages, expire=SESSION_EXPIRE)
@@ -335,8 +376,7 @@ def update_message(
     search_id: int,
     message_id: int,
     content: Optional[str] = None,
-    role: Optional[str] = None,
-    metadata: Optional[dict] = None
+    role: Optional[str] = None
 ) -> bool:
     """更新指定 message_id 的訊息內容
 
@@ -345,8 +385,7 @@ def update_message(
         search_id: 搜索 ID
         message_id: 要更新的訊息 ID（int）
         content: 新內容（可選）
-        role: 新角色（可選）
-        metadata: 新 metadata（可選）
+        role: 新角色（可選，但實際上不被使用）
     Returns:
         是否成功更新
     """
@@ -362,10 +401,7 @@ def update_message(
                 if msg["id"] == message_id:
                     if content is not None:
                         msg["content"] = content
-                    if role is not None:
-                        msg["role"] = role
-                    if metadata is not None:
-                        msg["metadata"] = metadata
+                    # role 不會被更新
                     updated = True
                     break
             if updated:
@@ -580,3 +616,6 @@ def is_redis_alive() -> bool:
         return r.ping() is True
     except Exception:
         return False
+
+# 為了向後兼容，保留原有的函數名稱
+add_message = create_message

@@ -1,6 +1,4 @@
 import os
-from typing import Dict, Any
-from pydantic import BaseModel, Field
 
 # Redis 相關設定
 REDIS_HOST = os.environ.get("ST_LLM_REDIS_HOST", "localhost")

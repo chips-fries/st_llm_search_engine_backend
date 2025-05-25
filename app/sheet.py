@@ -1,16 +1,14 @@
 import os
-import time
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from typing import Dict, List, Any
 import contextlib
-import pandas as pd
 import gspread
 from google.oauth2 import service_account
 import configparser
 
 # API 相關庫
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 import traceback
 
