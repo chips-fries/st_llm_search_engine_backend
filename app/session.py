@@ -139,16 +139,16 @@ async def api_get_llm_response(
         query: 用戶查詢
         
     Returns:
-        LLM 生成的回應消息
+        LLM 生成的回應消息內容
     """
     try:
         # 創建用戶消息
-        create_message(
-            session_id=session_id,
-            search_id=search_id,
-            role="user",
-            content=query
-        )
+        # create_message(
+        #     session_id=session_id,
+        #     search_id=search_id,
+        #     role="user",
+        #     content=query
+        # )
         
         # 使用延遲導入避免循環導入
         from .gemini import gemini_chat
@@ -157,14 +157,15 @@ async def api_get_llm_response(
         bot_reply = gemini_chat(session_id, search_id)
         
         # 添加機器人回應到會話
-        bot_message = create_message(
-            session_id=session_id,
-            search_id=search_id,
-            role="bot",
-            content=bot_reply
-        )
+        # create_message(
+        #     session_id=session_id,
+        #     search_id=search_id,
+        #     role="bot",
+        #     content=bot_reply
+        # )
         
-        return bot_message
+        # 只返回內容，不需要其他元數據
+        return {"content": bot_reply}
     except Exception as e:
         logger.error(f"LLM 處理查詢時出錯: {str(e)} | redis_alive={is_redis_alive()}")
         return {"error": str(e)}

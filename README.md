@@ -98,14 +98,13 @@ docker run -p 10000:10000 st-llm-backend
         "updated_at": 1711000050,
     }
     
-    2.2 message:abc123 範例 data
+    2.2 message:abc123-1 範例 data
     [
         {
-            "id": "1711000000123_1",
+            "id": 1,
             "role": "bot",
             "content": "歡迎使用！我是您的 AI 助手，有什麼我可以幫您的嗎？",
-            "timestamp": 1711000000,
-            "metadata": {}
+            "created_at": 1711000000,
         },
         ...
     ]
@@ -127,7 +126,7 @@ docker run -p 10000:10000 st-llm-backend
                 "n": 10,
                 "range": [1700000000, 1710000000]
             },
-            "created_at": "2024-03-01 12:00:00"
+            "created_at": 1711000000
         },
         ...
     ]
@@ -144,21 +143,56 @@ DELETE /api/session
 
 POST   /api/message
   Query: session_id (required), search_id (required)
-  Body:  { "role": "user|bot", "content": str, "metadata": dict (optional) }
+  Body:  { "role": "user|bot", "content": str}
   說明：新增訊息
+  Response 範例: {
+            "id": 1,
+            "role": "user",
+            "content": "...",
+            "created_at": 1711000000
+        }
 
 GET    /api/message
-  Query: session_id (required), search_id (required), since_id (optional), limit (optional)
+  Query: session_id (required), search_id (required), limit (optional)
   說明：取得訊息列表
+
+  Response 範例:
+    [
+        {
+            "id": 1,
+            "role": "user",
+            "content": "...",
+            "created_at": 1711000000
+        }, ...
+    ]
 
 PATCH  /api/message
   Query: session_id (required), search_id (required), message_id (required)
-  Body:  { "content": str (optional), "role": str (optional), "metadata": dict (optional) }
+  Body:  {  "content": str (optional) }
   說明：更新訊息
+  Response 範例: {
+        "id": {{message_id}},
+        "role": "user",
+        "content": "...",
+        "created_at": 1711000000
+  }
 
 DELETE /api/message
   Query: session_id (required), search_id (required), message_id (required)
   說明：刪除訊息
+
+GET    /api/message/llm
+  Query: session_id (required), search_id (required), limit (optional)
+  說明：取得訊息列表
+
+  Response 範例:
+    {
+        "id": 1,
+        "role": "bot",
+        "content": "...",
+        "created_at": 1711000000
+    }
+
 
 POST   /api/saved_search
   Query: session_id (required)
@@ -387,13 +421,47 @@ ChatPage 行為說明
 
 入口頁面，該頁面只有剛進入此頁面時才會出現的的歡迎訊息
 頁面呈現內容：
+"""
 歡迎使用 AI 雷達站！
 您可以透過以下方式開始使用：
 1. 從左側選擇已保存的搜索條件
 2. 獲取篩選過的 KOL 數據
 3. 與 AI 助手互動分析數據
+"""
 
-若點選了左側的任何一個查詢
+使用者打開頁面時，一開始會看到入口網站，若 GET /api/message? search_id=999 沒資料，則會顯示上面入口網站的歡迎字樣
+若是有資料的，則不會是入口網站的歡迎字樣，而是呈現像 chatgpt 的對話簿，依照 id 順序由上而下，右邊是 user 的訊息，左邊是 bot 的訊息 顯示，整個對話流左右都有10%的 padding(對話訊息不會貼著邊邊）
+並且 user 的訊息超過 ChatPage 的 2/3 則要換行，而 bot 的訊息則沒這個限制
+
+若使用者在下面打了訊息 & 送出後， call POST /api/message 獲得 成功的 response 後，
+使用者的訊息會出現在使用者輸入框的上方
+若原本的畫面是 入口網頁，則入口網頁會消失，變成一個像 chatgpt 的對話簿，再出現user的訊息
+該訊息也會存到 client 端的 歷史對話 cached (by session id by search id) 裡，網頁要呈現對話紀錄，都會先從 cached (expire 1天) 開始拿
+
+若失敗就要提示說訊息發送失敗，請重新發送貨通知開發人員的紅色提示字
+若下一次發送成功，提示字會消失
+
+若訊息成功送出且頁面渲染完成後，則接續 call POST /api/message/llm 獲得 response 後，同樣塞到對話簿的下方與 cached 裡
+
+
+
+
+
+
+若 POST /api/message 成功，且 is_llm = true，的話
+
+
+在下方右側出現使用者送出的訊息（以使用者的角度會看起來像是從輸入框的上方開始顯示），而訊息若超過 ChatPage 的 2/3 則要換行
+後端得到訊息後，除了存進去 redis 的
+
+去透過 gemini llm 獲得
+回應的訊息就會顯示在 user 的訊息下方，以使用者的角度整個對話過程會漸漸向上滾動
+
+
+
+
+
+
 
 
 
