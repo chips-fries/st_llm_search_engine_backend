@@ -78,7 +78,7 @@ def gemini_chat(session_id: str = "default", search_id: int = 999, prompt_path: 
         # 如果 prompt 存在，添加到 context 最前面
         if prompt:
             context.append({
-                "role": "system",
+                "role": "user",
                 "parts": [{"text": prompt}]
             })
             
