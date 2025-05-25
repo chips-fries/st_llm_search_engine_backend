@@ -1,5 +1,6 @@
 import google.generativeai as genai
 from google.generativeai import GenerativeModel
+import os
 
 from fastapi import APIRouter
 
@@ -11,13 +12,36 @@ from .settings import GEMINI_MODEL, GEMINI_API_KEY
 router = APIRouter()
 
 
-def gemini_chat(session_id: str = "default", search_id: int = 999) -> str:
+def load_prompt(prompt_path="app/prompt.txt"):
+    """
+    讀取 prompt 文件內容
+    
+    Args:
+        prompt_path: prompt 文件路徑
+        
+    Returns:
+        prompt 內容文本，如果讀取失敗則返回 None
+    """
+    try:
+        if not os.path.exists(prompt_path):
+            logger.warning(f"Prompt 文件不存在: {prompt_path}")
+            return None
+            
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception as e:
+        logger.error(f"讀取 prompt 文件失敗: {str(e)}")
+        return None
+
+
+def gemini_chat(session_id: str = "default", search_id: int = 999, prompt_path: str = "app/prompt.txt") -> str:
     """
     使用 Gemini API 進行聊天，根據會話歷史生成回應
 
     Args:
         session_id: 會話 ID
         search_id: 搜索 ID，默認為 999 (主對話)
+        prompt_path: prompt 文件路徑，默認為 app/prompt.txt
 
     Returns:
         AI 回應文本
@@ -45,8 +69,19 @@ def gemini_chat(session_id: str = "default", search_id: int = 999) -> str:
         # 獲取最新的消息
         latest_msg = messages[-1]
         
+        # 讀取 prompt
+        prompt = load_prompt(prompt_path)
+        
         # 轉換歷史消息為 Gemini API 格式（不包括最新消息）
         context = []
+        
+        # 如果 prompt 存在，添加到 context 最前面
+        if prompt:
+            context.append({
+                "role": "system",
+                "parts": [{"text": prompt}]
+            })
+            
         for msg in messages[:-1]:  # 排除最新消息
             role = "user" if msg["role"] == "user" else "model"
             context.append({
