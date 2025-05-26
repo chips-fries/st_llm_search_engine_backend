@@ -1,8 +1,10 @@
 import json
 import redis
 from typing import Optional, Any
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+import pandas as pd
+from datetime import datetime, timedelta, timezone
 
 from .utils import logger
 from .settings import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD
@@ -27,14 +29,79 @@ async def get_kol_info_endpoint():
         logger.error(f"獲取 KOL info 時出錯: {str(e)}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-@router.get("/kol-data")
-async def get_kol_data_endpoint():
+@router.post("/kol-data")
+async def get_filtered_kol_data(request: Request):
     try:
+        data = await request.json()
+        query = data.get("query", "")
+        tags = data.get("tags", [])
+        time_type = data.get("time", "")
+        n_days = int(data.get("n", 1) or 1)
+
         kol_data = get_redis_key("sheet:kol_data", default=[])
-        return JSONResponse({"kol_data": kol_data})
+        kol_info = get_redis_key("sheet:kol_info", default=[])
+        if not kol_data or not kol_info:
+            return JSONResponse({"kol_data": []})
+
+        df_data = pd.DataFrame(kol_data)
+        df_info = pd.DataFrame(kol_info)
+
+        # merge kol_id
+        if not df_data.empty and not df_info.empty:
+            df = pd.merge(df_data, df_info, on="kol_id", how="left", suffixes=("", "_info"))
+        else:
+            df = df_data
+
+        # 時間篩選
+        tz = timezone(timedelta(hours=8))
+        now = datetime.now(tz)
+        if time_type == 0:
+            # 昨日 00:00:00 ~ 23:59:59 (台北)
+            y = now - timedelta(days=1)
+            y_start = y.replace(hour=0, minute=0, second=0, microsecond=0)
+            y_end = y.replace(hour=23, minute=59, second=59, microsecond=999999)
+            ts_start = int(y_start.timestamp())
+            ts_end = int(y_end.timestamp())
+            df = df[(df["timestamp"] >= ts_start) & (df["timestamp"] <= ts_end)]
+        elif time_type == 1:
+            # 今日 00:00:00 ~ 現在 (台北)
+            t_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            ts_start = int(t_start.timestamp())
+            ts_end = int(now.timestamp())
+            df = df[(df["timestamp"] >= ts_start) & (df["timestamp"] <= ts_end)]
+        elif time_type == 2:
+            # 近 n 日 (含今日)
+            n_start = (now - timedelta(days=n_days-1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            ts_start = int(n_start.timestamp())
+            ts_end = int(now.timestamp())
+            df = df[(df["timestamp"] >= ts_start) & (df["timestamp"] <= ts_end)]
+
+        # 關鍵字過濾
+        if query:
+            df = df[df["content"].astype(str).str.contains(query, case=False, na=False)]
+        # tags 過濾（假設 tag 欄位存在於 info）
+        if tags and tags != ["All"]:
+            df = df[df["tag"].isin(tags)]
+
+        # timestamp 轉換
+        if "timestamp" in df.columns:
+            df["發文時間"] = pd.to_datetime(df["timestamp"], unit="s", utc=True).dt.tz_convert('Asia/Taipei').dt.strftime("%Y-%m-%dT%H:%M:%S")
+        else:
+            df["發文時間"] = ""
+
+        # 欄位 rename
+        df["Id"] = df["doc_id"]
+        df["KOL"] = df["kol_name"].fillna(df["kol_id"])
+        df["連結"] = df["post_url"]
+        df["內容"] = df["content"]
+        df["互動數"] = df["reaction_count"]
+        df["分享數"] = df["share_count"]
+
+        result = df[["Id", "KOL", "連結", "內容", "互動數", "分享數", "發文時間"]].to_dict(orient="records")
+        return JSONResponse({"kol_data": result})
     except Exception as e:
-        logger.error(f"獲取 KOL data 時出錯: {str(e)}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        logger.error(f"KOL data 過濾/合併出錯: {str(e)}")
+        return JSONResponse({"kol_data": [], "error": str(e)}, status_code=500)
 
 def is_redis_running(host: str = REDIS_HOST, port: int = REDIS_PORT) -> bool:
     """檢查 Redis 是否在運行中"""

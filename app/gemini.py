@@ -34,7 +34,7 @@ def load_prompt(prompt_path="app/prompt.txt"):
         return None
 
 
-def gemini_chat(session_id: str = "default", search_id: int = 999, prompt_path: str = "app/prompt.txt") -> str:
+def gemini_chat(session_id: str = "default", search_id: int = 999, prompt_path: str = "app/prompt.txt", query: str = None) -> str:
     """
     使用 Gemini API 進行聊天，根據會話歷史生成回應
 
@@ -42,11 +42,11 @@ def gemini_chat(session_id: str = "default", search_id: int = 999, prompt_path: 
         session_id: 會話 ID
         search_id: 搜索 ID，默認為 999 (主對話)
         prompt_path: prompt 文件路徑，默認為 app/prompt.txt
+        query: 若有值則直接用 query 當成 send_message 內容
 
     Returns:
         AI 回應文本
     """
-    # 獲取 API key
     api_key = GEMINI_API_KEY
     if not api_key:
         error_msg = "錯誤：未設置 Gemini API 金鑰，無法使用聊天功能。"
@@ -54,48 +54,39 @@ def gemini_chat(session_id: str = "default", search_id: int = 999, prompt_path: 
         return error_msg
 
     try:
-        # 配置 API
         genai.configure(api_key=api_key)
-
-        # 創建模型
         model = GenerativeModel(GEMINI_MODEL)
-
-        # 獲取過去 30 條聊天記錄作為上下文
         messages = session.get_messages(session_id, search_id, limit=30)
-        
-        if not messages:
+        if not messages and not query:
             return "請輸入您的問題或指令。"
-        
-        # 獲取最新的消息
-        latest_msg = messages[-1]
-        
-        # 讀取 prompt
         prompt = load_prompt(prompt_path)
-        
-        # 轉換歷史消息為 Gemini API 格式（不包括最新消息）
         context = []
-        
-        # 如果 prompt 存在，添加到 context 最前面
         if prompt:
             context.append({
                 "role": "user",
                 "parts": [{"text": prompt}]
             })
-            
-        for msg in messages[:-1]:  # 排除最新消息
-            role = "user" if msg["role"] == "user" else "model"
-            context.append({
-                "role": role,
-                "parts": [{"text": msg["content"]}]
-            })
-
-        # 創建聊天會話
+        # 有 query 時 context 只加 messages[:-1]
+        if query:
+            for msg in messages[:-1]:
+                role = "user" if msg["role"] == "user" else "model"
+                context.append({
+                    "role": role,
+                    "parts": [{"text": msg["content"]}]
+                })
+        else:
+            for msg in messages[:-1]:
+                role = "user" if msg["role"] == "user" else "model"
+                context.append({
+                    "role": role,
+                    "parts": [{"text": msg["content"]}]
+                })
         chat = model.start_chat(
             history=context if context else None
         )
-
-        # 發送最新的用戶消息
-        response = chat.send_message(latest_msg["content"])
+        # 如果有 query 直接用 query，否則用最新一筆
+        send_content = query if query else messages[-1]["content"]
+        response = chat.send_message(send_content)
         return response.text
     except Exception as e:
         logger.error(f"Gemini 聊天出錯: {str(e)}")

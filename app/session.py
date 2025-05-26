@@ -154,7 +154,7 @@ async def api_get_llm_response(
         from .gemini import gemini_chat
         
         # 使用 Gemini API 處理請求，不再傳入 query
-        bot_reply = gemini_chat(session_id, search_id)
+        bot_reply = gemini_chat(session_id, search_id, query=query)
         
         # 添加機器人回應到會話
         # create_message(
