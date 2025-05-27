@@ -202,7 +202,7 @@ async def get_filtered_kol_data(
         logger.error(f"KOL data 過濾/合併出錯: {str(e)}")
         return JSONResponse({"kol_data": [], "markdown": "", "error": str(e)}, status_code=500)
 
-@router.post("/kol-data/count")
+@router.post("/kol-data-count")
 async def get_filtered_kol_data_count(
     session_id: str = Query(..., description="必填：會話 ID"),
     search_id: int = Query(..., description="必填：搜索 ID"),
@@ -265,7 +265,6 @@ async def get_filtered_kol_data_count(
 
         # 返回數量
         count = len(df)
-        
 
         return JSONResponse({"count": count})
     except Exception as e:
