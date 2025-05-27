@@ -204,7 +204,6 @@ async def get_filtered_kol_data(
 
 @router.post("/kol-data-count")
 async def get_filtered_kol_data_count(
-
     request: Request = None
 ):
     """獲取篩選後的 KOL 資料數量"""
@@ -213,7 +212,6 @@ async def get_filtered_kol_data_count(
             return JSONResponse({"error": "無效的請求"}, status_code=400)
             
         data = await request.json()
-        query = data.get("query", "")
         tags = data.get("tags", [])
         time_type = data.get("time", "")
         n_days = int(data.get("n", 1) or 1)
@@ -221,7 +219,11 @@ async def get_filtered_kol_data_count(
         kol_data = get_redis_key("sheet:kol_data", default=[])
         kol_info = get_redis_key("sheet:kol_info", default=[])
         if not kol_data or not kol_info:
-            return JSONResponse({"count": 0})
+            return JSONResponse({
+                "count": 0,
+                "start_datetime": "",
+                "end_datetime": ""
+            })
 
         df_data = pd.DataFrame(kol_data)
         df_info = pd.DataFrame(kol_info)
@@ -235,6 +237,9 @@ async def get_filtered_kol_data_count(
         # 時間篩選
         tz = timezone(timedelta(hours=8))
         now = datetime.now(tz)
+        start_datetime = ""
+        end_datetime = ""
+        
         if time_type == 0:
             # 昨日 00:00:00 ~ 23:59:59 (台北)
             y = now - timedelta(days=1)
@@ -243,18 +248,26 @@ async def get_filtered_kol_data_count(
             ts_start = int(y_start.timestamp())
             ts_end = int(y_end.timestamp())
             df = df[(df["timestamp"] >= ts_start) & (df["timestamp"] <= ts_end)]
+            start_datetime = y_start.strftime("%Y-%m-%d %H:%M:%S")
+            end_datetime = y_end.strftime("%Y-%m-%d %H:%M:%S")
         elif time_type == 1:
             # 今日 00:00:00 ~ 現在 (台北)
             t_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
             ts_start = int(t_start.timestamp())
             ts_end = int(now.timestamp())
             df = df[(df["timestamp"] >= ts_start) & (df["timestamp"] <= ts_end)]
+            start_datetime = t_start.strftime("%Y-%m-%d %H:%M:%S")
+            end_datetime = now.strftime("%Y-%m-%d %H:%M:%S")
         elif time_type == 2:
             # 近 n 日 (含今日)
-            n_start = (now - timedelta(days=n_days-1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            n_start = (now - timedelta(days=n_days-1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
             ts_start = int(n_start.timestamp())
             ts_end = int(now.timestamp())
             df = df[(df["timestamp"] >= ts_start) & (df["timestamp"] <= ts_end)]
+            start_datetime = n_start.strftime("%Y-%m-%d %H:%M:%S")
+            end_datetime = now.strftime("%Y-%m-%d %H:%M:%S")
 
         # tags 過濾（假設 tag 欄位存在於 info）
         if tags and tags != ["All"]:
@@ -264,10 +277,19 @@ async def get_filtered_kol_data_count(
         # 返回數量
         count = len(df)
 
-        return JSONResponse({"count": count})
+        return JSONResponse({
+            "count": count,
+            "start_datetime": start_datetime,
+            "end_datetime": end_datetime
+        })
     except Exception as e:
         logger.error(f"獲取 KOL data 數量時出錯: {str(e)}")
-        return JSONResponse({"count": 0, "error": str(e)}, status_code=500)
+        return JSONResponse({
+            "count": 0,
+            "start_datetime": "",
+            "end_datetime": "",
+            "error": str(e)
+        }, status_code=500)
 
 
 def is_redis_running(host: str = REDIS_HOST, port: int = REDIS_PORT) -> bool:
