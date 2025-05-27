@@ -4,10 +4,12 @@ from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, Body, Query
 from .redis import set_redis_key, get_redis_key, delete_redis_key, scan_redis_keys, get_redis_connection
 from .utils import logger
-from .settings import SESSION_EXPIRE
+from .settings import SESSION_EXPIRE, GEMINI_MODEL, GEMINI_API_KEY
 from .sheet import sheet_manager
 import threading
 from datetime import datetime
+import google.generativeai as genai
+from google.generativeai import GenerativeModel
 
 # per-session lock
 _session_locks: Dict[str, threading.Lock] = {}
@@ -168,6 +170,85 @@ async def api_get_llm_response(
         return {"content": bot_reply}
     except Exception as e:
         logger.error(f"LLM 處理查詢時出錯: {str(e)} | redis_alive={is_redis_alive()}")
+        return {"error": str(e)}
+
+@router.post("/message/kol-data-llm")
+async def api_get_kol_data_llm_response(
+    session_id: str = Query(...),
+    search_id: int = Query(...),
+    request_data: dict = Body(...),
+):
+    """
+    從 Redis 中獲取 kol_data_md:{session_id}-{search_id} 的 Markdown 格式資料，
+    並使用使用者的查詢和 prompt.txt 來產生 LLM 回應
+    
+    Args:
+        session_id: 會話 ID
+        search_id: 搜索 ID
+        request_data: 包含查詢的請求體 {"query": "..."}
+        
+    Returns:
+        LLM 生成的回應內容
+    """
+    try:
+        # 從請求體中獲取查詢
+        query = request_data.get("query", "")
+        if not query:
+            return {"error": "查詢不能為空"}
+        
+        # 從 Redis 中獲取 Markdown 格式的 KOL 數據
+        from .redis import get_redis_key
+        
+        # 直接獲取 Markdown 格式數據
+        kol_data_md_key = f"kol_data_md:{session_id}-{search_id}"
+        markdown_content = get_redis_key(kol_data_md_key, default="")
+        
+        if not markdown_content:
+            return {"error": "找不到 KOL 數據，請先使用 /api/redis/kol-data 獲取資料"}
+        
+        # 加載 prompt 模板
+        from .gemini import load_prompt
+        prompt = load_prompt()
+        if not prompt:
+            return {"error": "無法加載 prompt 模板"}
+        
+        # 直接使用 GenerativeModel 而不是 gemini_chat
+        if not GEMINI_API_KEY:
+            return {"error": "未設置 Gemini API 金鑰，無法使用聊天功能"}
+            
+        try:
+            genai.configure(api_key=GEMINI_API_KEY)
+            model = GenerativeModel(GEMINI_MODEL)
+            
+            # 將 prompt 和 markdown 資料放入 history 中
+            # 這樣 LLM 就能理解背景和數據，而用戶查詢可以更簡潔
+            # system_message = f"{prompt}\n\n以下是 KOL 發文資料：\n\n```markdown\n{markdown_content}\n```"
+            
+            # 建立對話，將系統訊息放入 history
+            chat = model.start_chat(
+                history=[
+                    {
+                        "role": "user",
+                        "parts": [prompt]
+                    },
+                    {
+                        "role": "model",
+                        "parts": [f"以下是 KOL 發文資料：\n\n```markdown\n{markdown_content}\n```"]
+                    }
+                ]
+            )
+            
+            # 只傳送用戶的實際查詢
+            response = chat.send_message(query)
+            
+            # 直接返回 LLM 的回應
+            return {"content": response.text}
+        except Exception as e:
+            logger.error(f"Gemini API 呼叫出錯: {str(e)}")
+            return {"error": f"Gemini API 錯誤: {str(e)}"}
+            
+    except Exception as e:
+        logger.error(f"KOL data LLM 處理查詢時出錯: {str(e)}")
         return {"error": str(e)}
 
 def generate_session_id() -> str:
