@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from .utils import logger
 from .settings import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD
-from .sheet import sheet_manager
+
 
 # Redis 連接池
 _redis_pool = None
@@ -50,9 +50,11 @@ async def get_filtered_kol_data(
         kol_data = get_redis_key("sheet:kol_data", default=[])
         kol_info = get_redis_key("sheet:kol_info", default=[])
         if not kol_info:
+            from .sheet import sheet_manager
             kol_info = sheet_manager.get_kol_info(force_refresh=True)
 
         if not kol_data:
+            from .sheet import sheet_manager
             kol_data = sheet_manager.get_kol_data(force_refresh=True)
 
         # 轉換為 DataFrame
