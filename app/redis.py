@@ -204,8 +204,7 @@ async def get_filtered_kol_data(
 
 @router.post("/kol-data-count")
 async def get_filtered_kol_data_count(
-    session_id: str = Query(..., description="必填：會話 ID"),
-    search_id: int = Query(..., description="必填：搜索 ID"),
+
     request: Request = None
 ):
     """獲取篩選後的 KOL 資料數量"""
@@ -257,7 +256,6 @@ async def get_filtered_kol_data_count(
             ts_end = int(now.timestamp())
             df = df[(df["timestamp"] >= ts_start) & (df["timestamp"] <= ts_end)]
 
-
         # tags 過濾（假設 tag 欄位存在於 info）
         if tags and tags != ["All"]:
             if "tag" in df.columns:
@@ -270,6 +268,7 @@ async def get_filtered_kol_data_count(
     except Exception as e:
         logger.error(f"獲取 KOL data 數量時出錯: {str(e)}")
         return JSONResponse({"count": 0, "error": str(e)}, status_code=500)
+
 
 def is_redis_running(host: str = REDIS_HOST, port: int = REDIS_PORT) -> bool:
     """檢查 Redis 是否在運行中"""
