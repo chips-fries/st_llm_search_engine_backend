@@ -222,7 +222,6 @@ async def api_get_kol_data_llm_response(
             
             # 將 prompt 和 markdown 資料放入 history 中
             # 這樣 LLM 就能理解背景和數據，而用戶查詢可以更簡潔
-            # system_message = f"{prompt}\n\n以下是 KOL 發文資料：\n\n```markdown\n{markdown_content}\n```"
             
             # 建立對話，將系統訊息放入 history
             chat = model.start_chat(
