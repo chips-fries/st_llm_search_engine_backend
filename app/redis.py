@@ -218,6 +218,15 @@ async def get_filtered_kol_data_count(
 
         kol_data = get_redis_key("sheet:kol_data", default=[])
         kol_info = get_redis_key("sheet:kol_info", default=[])
+
+        if not kol_info:
+            from .sheet import sheet_manager
+            kol_info = sheet_manager.get_kol_info(force_refresh=True)
+
+        if not kol_data:
+            from .sheet import sheet_manager
+            kol_data = sheet_manager.get_kol_data(force_refresh=True)
+
         if not kol_data or not kol_info:
             return JSONResponse({
                 "count": 0,
