@@ -154,8 +154,8 @@ async def get_filtered_kol_data(
         
         # 使用 pandas 和 string operations 高效轉換為 Markdown
         # 創建 Markdown 表格頭
-        md_header = "| # | KOL | 發文時間 | 內容 | 互動數 | 分享數 | 連結 |\n"
-        md_separator = "|---|---|---|---|---|---|---|\n"
+        md_header = "```markdown\n| # | KOL | 發文時間 | 內容 | 互動數 | 分享數 | 連結 |\n"
+        md_separator = "|---|---|---|---|---|---|---|\n```"
         
         # 創建 dataframe 並轉換為 markdown
         result_df = pd.DataFrame(result)
