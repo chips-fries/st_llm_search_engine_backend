@@ -154,8 +154,8 @@ async def get_filtered_kol_data(
         
         # 使用 pandas 和 string operations 高效轉換為 Markdown
         # 創建 Markdown 表格頭
-        md_header = "```markdown\n| # | Id | KOL | 連結 | 內容 | 互動數 | 分享數 | 發文時間 |\n"
-        md_separator = "|---|---|---|---|---|---|---|---|\n"
+        md_header = "```markdown\n| Id | KOL | 連結 | 內容 | 互動數 | 分享數 | 發文時間 |\n"
+        md_separator = "|---|---|---|---|---|---|---|\n"
         
         # 創建 dataframe 並轉換為 markdown
         result_df = pd.DataFrame(result)
@@ -165,19 +165,16 @@ async def get_filtered_kol_data(
             # 內容處理：移除換行符，截斷過長內容
             result_df["內容"] = result_df["內容"].astype(str).str.replace('\n', ' ').str[:100] + "..."
             
-            # 建立一個索引列
-            result_df.insert(0, '#', range(1, len(result_df) + 1))
-            
             # 使用 pandas to_markdown (或自行拼接)
             md_rows = result_df.apply(
-                lambda row: f"| {row['#']} | {row['Id']} | {row['KOL']} | {row['連結']} | {row['內容']} | {row['互動數']} | {row['分享數']} | {row['發文時間']} |", 
+                lambda row: f"| {row['Id']} | {row['KOL']} | {row['連結']} | {row['內容']} | {row['互動數']} | {row['分享數']} | {row['發文時間']} |", 
                 axis=1
             ).str.cat(sep="\n")
             
             # 完整 markdown 表格
             markdown_content = md_header + md_separator + md_rows
         else:
-            markdown_content = md_header + md_separator + "| 沒有資料 | | | | | | | |"
+            markdown_content = md_header + md_separator + "| 沒有資料 | | | | | | |"
         
         markdown_content += "\n```"
         
