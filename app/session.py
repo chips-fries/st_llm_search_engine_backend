@@ -126,51 +126,88 @@ async def api_update_saved_search(
 async def api_delete_saved_search(session_id: str, search_id: int):
     return {"success": delete_saved_search(session_id, search_id)}
 
-@router.get("/message/llm")
-async def api_get_llm_response(
-    session_id: str,
-    search_id: int,
-    query: str = Query(..., description="用戶查詢")
+# @router.get("/message/llm")
+# async def api_get_llm_response(
+#     session_id: str,
+#     search_id: int,
+#     query: str = Query(..., description="用戶查詢")
+# ):
+#     """
+#     獲取 LLM 對用戶查詢的回應，基於前 30 個對話記錄
+    
+#     Args:
+#         session_id: 會話 ID
+#         search_id: 搜索 ID
+#         query: 用戶查詢
+        
+#     Returns:
+#         LLM 生成的回應消息內容
+#     """
+#     try:
+#         # 創建用戶消息
+#         # create_message(
+#         #     session_id=session_id,
+#         #     search_id=search_id,
+#         #     role="user",
+#         #     content=query
+#         # )
+        
+#         # 使用延遲導入避免循環導入
+#         from .gemini import gemini_chat
+        
+#         # 使用 Gemini API 處理請求，不再傳入 query
+#         bot_reply = gemini_chat(session_id, search_id, query=query)
+        
+#         # 添加機器人回應到會話
+#         # create_message(
+#         #     session_id=session_id,
+#         #     search_id=search_id,
+#         #     role="bot",
+#         #     content=bot_reply
+#         # )
+        
+#         # 只返回內容，不需要其他元數據
+#         return {"content": bot_reply}
+#     except Exception as e:
+#         logger.error(f"LLM 處理查詢時出錯: {str(e)} | redis_alive={is_redis_alive()}")
+#         return {"error": str(e)}
+
+
+@router.post("/message/llm")
+async def api_post_llm_response(
+    session_id: str = Query(..., description="會話 ID"),
+    search_id: int = Query(..., description="搜索 ID"),
+    request_data: dict = Body(..., description="請求內容，包含 query 字段")
 ):
     """
-    獲取 LLM 對用戶查詢的回應，基於前 30 個對話記錄
+    通過 POST 方法獲取 LLM 對用戶查詢的回應，基於前 30 個對話記錄
     
     Args:
         session_id: 會話 ID
         search_id: 搜索 ID
-        query: 用戶查詢
+        request_data: 請求內容，包含用戶查詢
         
     Returns:
         LLM 生成的回應消息內容
     """
     try:
-        # 創建用戶消息
-        # create_message(
-        #     session_id=session_id,
-        #     search_id=search_id,
-        #     role="user",
-        #     content=query
-        # )
-        
+        query = request_data.get("query", "")
+        if not query:
+            return {"error": "請求必須包含 query 字段"}
+            
         # 使用延遲導入避免循環導入
         from .gemini import gemini_chat
         
-        # 使用 Gemini API 處理請求，不再傳入 query
+        # 使用 Gemini API 處理請求
         bot_reply = gemini_chat(session_id, search_id, query=query)
-        
-        # 添加機器人回應到會話
-        # create_message(
-        #     session_id=session_id,
-        #     search_id=search_id,
-        #     role="bot",
-        #     content=bot_reply
-        # )
         
         # 只返回內容，不需要其他元數據
         return {"content": bot_reply}
     except Exception as e:
-        logger.error(f"LLM 處理查詢時出錯: {str(e)} | redis_alive={is_redis_alive()}")
+        error_msg = f"LLM 處理 POST 查詢時出錯: {str(e)} | redis_alive={is_redis_alive()}"
+        logger.error(error_msg)
         return {"error": str(e)}
+
 
 @router.post("/message/kol-data-llm")
 async def api_get_kol_data_llm_response(
