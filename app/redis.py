@@ -195,12 +195,12 @@ async def get_filtered_kol_data(
             
         # 返回原始數據和 Markdown 格式
         return JSONResponse({
-            "kol_data": result,
+            # "kol_data": result,
             "markdown": markdown_content
         })
     except Exception as e:
         logger.error(f"KOL data 過濾/合併出錯: {str(e)}")
-        return JSONResponse({"kol_data": [], "markdown": "", "error": str(e)}, status_code=500)
+        return JSONResponse({"markdown": "", "error": str(e)}, status_code=500)
 
 @router.post("/kol-data-count")
 async def get_filtered_kol_data_count(
