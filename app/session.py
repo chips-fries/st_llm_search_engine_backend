@@ -96,8 +96,20 @@ async def api_update_message(
     )}
 
 @router.delete("/message")
-async def api_delete_message(session_id: str, search_id: int, message_id: int):
-    return {"success": delete_message(session_id, search_id, message_id)}
+async def api_delete_message(
+    session_id: str,
+    search_id: int,
+    message_id: Optional[int] = None
+):
+    if message_id is not None:
+        return {"success": delete_message(session_id, search_id, message_id)}
+    # 沒有帶 message_id，直接清空該 search_id 的所有訊息
+    from .redis import set_redis_key
+    from .settings import SESSION_EXPIRE
+    message_key = f"messages:{session_id}-{search_id}"
+    set_redis_key(message_key, [], expire=SESSION_EXPIRE)
+    logger.info(f"清空所有訊息 in {session_id}-{search_id}")
+    return {"success": True}
 
 # 新增 saved_search CRUD API
 @router.post("/saved_search")
